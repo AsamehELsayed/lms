@@ -64,6 +64,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Copy application files
 COPY . /var/www/html
 
+# Install Composer and NPM dependencies (skip Playwright browser download in Docker)
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm ci
+RUN npm run production
+
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage \
