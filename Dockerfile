@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y \
     libsodium-dev \
     ffmpeg \
     supervisor \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -82,7 +83,26 @@ RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
     && echo "memory_limit = 512M" >> "$PHP_INI_DIR/conf.d/uploads.ini" \
     && echo "max_execution_time = 300" >> "$PHP_INI_DIR/conf.d/uploads.ini"
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Configure PHP-FPM to run in foreground
+RUN sed -i 's/;daemonize = yes/daemonize = no/' /usr/local/etc/php-fpm.conf \
+    || echo "daemonize = no" >> /usr/local/etc/php-fpm.conf
+
+# Ensure PHP-FPM pool configuration exists and is valid
+RUN if [ ! -f /usr/local/etc/php-fpm.d/www.conf ]; then \
+        cp /usr/local/etc/php-fpm.d/www.conf.default /usr/local/etc/php-fpm.d/www.conf 2>/dev/null || true; \
+    fi
+
 # Expose port 9000 for PHP-FPM
 EXPOSE 9000
 
-CMD ["php-fpm"]
+# Healthcheck to verify PHP-FPM is running (check if process is alive)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD pgrep -f php-fpm || exit 1
+
+# Use entrypoint script to ensure proper startup
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["php-fpm", "-F"]
